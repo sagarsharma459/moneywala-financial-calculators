@@ -1,0 +1,218 @@
+<!-- ✅ Moneywala SWP Calculator -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div id="swp-calculator" class="max-w-4xl mx-auto my-10 bg-white shadow-2xl rounded-2xl p-6 font-sans">
+  <!-- Heading -->
+  <div class="bg-green-600 rounded-2xl p-4 text-center">
+    <h1 class="text-white text-2xl font-bold">💸 Moneywala SWP Calculator</h1>
+  </div>
+  <p class="text-gray-700 text-center mt-2 mb-6">Plan your systematic withdrawals and see how your corpus and returns evolve over time.</p>
+
+  <!-- Input Fields -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div>
+      <label class="block text-gray-700 font-medium">Total Investment / Corpus</label>
+      <input type="number" id="corpus" value="1000000" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Expected Annual Return (%)</label>
+      <input type="number" id="rate" value="12" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Withdrawal Amount</label>
+      <input type="number" id="withdrawal" value="20000" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Withdrawal Frequency</label>
+      <select id="frequency" class="w-full p-2 border rounded">
+        <option value="12">Monthly</option>
+        <option value="4">Quarterly</option>
+        <option value="2">Half-Yearly</option>
+        <option value="1">Yearly</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Investment Period (Years)</label>
+      <input type="number" id="years" value="10" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Currency</label>
+      <select id="currency" class="w-full p-2 border rounded">
+        <option value="₹">₹</option>
+        <option value="$">$</option>
+        <option value="€">€</option>
+        <option value="£">£</option>
+      </select>
+    </div>
+    <div class="flex items-center mt-6">
+      <input type="checkbox" id="inflationCheckbox" class="mr-2" />
+      <label class="text-gray-700 font-medium">Adjust for Inflation</label>
+    </div>
+    <div id="inflationInputContainer" class="hidden">
+      <label class="block text-gray-700 font-medium">Inflation Rate (%)</label>
+      <input type="number" id="inflationRate" value="5" class="w-full p-2 border rounded" />
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="flex justify-center gap-4 mb-6">
+    <button id="calculateBtn" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700">Calculate</button>
+    <button id="resetBtn" class="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500">Reset</button>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="text-center mb-6 hidden">
+    <h2 class="text-xl font-bold mb-2">Results</h2>
+    <p id="totalWithdrawn" class="text-gray-700 mb-1"></p>
+    <p id="corpusRemaining" class="text-gray-700 mb-1"></p>
+    <p id="totalReturns" class="text-gray-700 mb-1"></p>
+    <p id="numWithdrawals" class="text-gray-700 mb-4"></p>
+  </div>
+
+  <!-- Charts -->
+  <div class="mb-6">
+    <canvas id="barChart"></canvas>
+  </div>
+  <div class="mb-6">
+    <canvas id="pieChart" style="max-height:400px;"></canvas>
+  </div>
+
+  <!-- Yearly / Monthly Breakdown Table -->
+  <div class="overflow-x-auto">
+    <table class="min-w-full border border-gray-300" id="breakdownTable">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 border">Period</th>
+          <th class="px-4 py-2 border">Withdrawal</th>
+          <th class="px-4 py-2 border">Remaining Corpus</th>
+          <th class="px-4 py-2 border">Returns</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const corpusInput = document.getElementById('corpus');
+  const rateInput = document.getElementById('rate');
+  const withdrawalInput = document.getElementById('withdrawal');
+  const frequencyInput = document.getElementById('frequency');
+  const yearsInput = document.getElementById('years');
+  const currencyInput = document.getElementById('currency');
+  const inflationCheckbox = document.getElementById('inflationCheckbox');
+  const inflationContainer = document.getElementById('inflationInputContainer');
+  const inflationRateInput = document.getElementById('inflationRate');
+  const calculateBtn = document.getElementById('calculateBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const resultsDiv = document.getElementById('results');
+  const totalWithdrawnP = document.getElementById('totalWithdrawn');
+  const corpusRemainingP = document.getElementById('corpusRemaining');
+  const totalReturnsP = document.getElementById('totalReturns');
+  const numWithdrawalsP = document.getElementById('numWithdrawals');
+  const breakdownTableBody = document.querySelector('#breakdownTable tbody');
+
+  let barChart, pieChart;
+
+  inflationCheckbox.addEventListener('change', () => {
+    inflationContainer.classList.toggle('hidden', !inflationCheckbox.checked);
+  });
+
+  calculateBtn.addEventListener('click', () => {
+    const corpus = parseFloat(corpusInput.value);
+    const r = parseFloat(rateInput.value)/100;
+    const withdrawal = parseFloat(withdrawalInput.value);
+    const n = parseInt(frequencyInput.value);
+    const years = parseInt(yearsInput.value);
+    const currency = currencyInput.value;
+    let inflationRate = 0;
+    if(inflationCheckbox.checked) inflationRate = parseFloat(inflationRateInput.value)/100;
+
+    const totalPeriods = years * n;
+    let remainingCorpus = corpus;
+    let totalWithdrawn = 0;
+    let totalReturns = 0;
+
+    const periods = [];
+    const withdrawalData = [];
+    const remainingData = [];
+    const returnsData = [];
+
+    breakdownTableBody.innerHTML = '';
+
+    for(let i=1; i<=totalPeriods; i++){
+      const periodReturn = remainingCorpus * (r/n);
+      let withdrawalAdj = withdrawal;
+      if(inflationCheckbox.checked) withdrawalAdj = withdrawal / Math.pow(1 + inflationRate, i-1);
+
+      remainingCorpus = remainingCorpus + periodReturn - withdrawalAdj;
+      if(remainingCorpus < 0) withdrawalAdj += remainingCorpus, remainingCorpus = 0;
+
+      totalWithdrawn += withdrawalAdj;
+      totalReturns += periodReturn;
+
+      periods.push(i);
+      withdrawalData.push(withdrawalAdj);
+      remainingData.push(remainingCorpus);
+      returnsData.push(periodReturn);
+
+      const row = `<tr>
+        <td class="px-4 py-2 border">${i}</td>
+        <td class="px-4 py-2 border">${currency}${withdrawalAdj.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${remainingCorpus.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${periodReturn.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+      </tr>`;
+      breakdownTableBody.innerHTML += row;
+
+      if(remainingCorpus <=0) break; // Stop if corpus finishes
+    }
+
+    totalWithdrawnP.textContent = `Total Withdrawn Amount: ${currency}${totalWithdrawn.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    corpusRemainingP.textContent = `Remaining Corpus: ${currency}${remainingCorpus.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    totalReturnsP.textContent = `Total Returns Earned: ${currency}${totalReturns.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    numWithdrawalsP.textContent = `Number of Withdrawals: ${periods.length}`;
+    resultsDiv.classList.remove('hidden');
+
+    // Dynamic chart height
+    const barHeight = Math.min(600, 100 + periods.length*10);
+    document.getElementById('barChart').height = barHeight;
+
+    const barData = {
+      labels: periods,
+      datasets: [
+        { label:'Remaining Corpus', data: remainingData, backgroundColor:'rgba(34,197,94,0.7)' },
+        { label:'Withdrawal', data: withdrawalData, backgroundColor:'rgba(99,102,241,0.7)' }
+      ]
+    };
+    const pieData = {
+      labels:['Total Withdrawn','Remaining Corpus','Returns'],
+      datasets:[{ data:[totalWithdrawn, remainingCorpus, totalReturns], backgroundColor:['#6366F1','#10B981','#FBBF24'] }]
+    };
+
+    if(barChart) barChart.destroy();
+    if(pieChart) pieChart.destroy();
+
+    barChart = new Chart(document.getElementById('barChart').getContext('2d'), {type:'bar', data:barData, options:{responsive:true, plugins:{legend:{position:'top'}}}});
+    pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {type:'pie', data:pieData, options:{responsive:true}});
+  });
+
+  resetBtn.addEventListener('click', () => {
+    corpusInput.value = 1000000;
+    rateInput.value = 12;
+    withdrawalInput.value = 20000;
+    frequencyInput.value = 12;
+    yearsInput.value = 10;
+    currencyInput.value = '₹';
+    inflationCheckbox.checked = false;
+    inflationContainer.classList.add('hidden');
+    inflationRateInput.value = 5;
+    resultsDiv.classList.add('hidden');
+    breakdownTableBody.innerHTML = '';
+    if(barChart) barChart.destroy();
+    if(pieChart) pieChart.destroy();
+  });
+});
+</script>

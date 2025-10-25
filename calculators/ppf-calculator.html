@@ -1,0 +1,212 @@
+<!-- ✅ Moneywala PPF Calculator -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div id="ppf-calculator" class="max-w-4xl mx-auto my-10 bg-white shadow-2xl rounded-2xl p-6 font-sans">
+  <!-- Heading -->
+  <div class="bg-green-600 rounded-2xl p-4 text-center">
+    <h1 class="text-white text-2xl font-bold">💰 PPF Calculator</h1>
+  </div>
+  <p class="text-gray-700 text-center mt-2 mb-6">Estimate your PPF maturity value and interest earned over time, for Lumpsum or Monthly contributions.</p>
+
+  <!-- Input Fields -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div>
+      <label class="block text-gray-700 font-medium">Investment Type</label>
+      <select id="investmentType" class="w-full p-2 border rounded">
+        <option value="lumpsum">Lumpsum</option>
+        <option value="monthly">Monthly Contribution</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium" id="amountLabel">Investment Amount</label>
+      <input type="number" id="investment" value="100000" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Deposit Period (Years)</label>
+      <input type="number" id="years" value="15" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Interest Rate (%)</label>
+      <input type="number" id="rate" value="7.1" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Currency</label>
+      <select id="currency" class="w-full p-2 border rounded">
+        <option value="₹">₹</option>
+        <option value="$">$</option>
+        <option value="€">€</option>
+        <option value="£">£</option>
+      </select>
+    </div>
+    <div class="flex items-center mt-6">
+      <input type="checkbox" id="inflationCheckbox" class="mr-2" />
+      <label class="text-gray-700 font-medium">Adjust for Inflation</label>
+    </div>
+    <div id="inflationInputContainer" class="hidden">
+      <label class="block text-gray-700 font-medium">Inflation Rate (%)</label>
+      <input type="number" id="inflationRate" value="5" class="w-full p-2 border rounded" />
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="flex justify-center gap-4 mb-6">
+    <button id="calculateBtn" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700">Calculate</button>
+    <button id="resetBtn" class="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500">Reset</button>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="text-center mb-6 hidden">
+    <h2 class="text-xl font-bold mb-2">Results</h2>
+    <p id="totalInvested" class="text-gray-700 mb-1"></p>
+    <p id="interestEarned" class="text-gray-700 mb-1"></p>
+    <p id="maturityValue" class="text-gray-700 mb-1"></p>
+    <p id="maturityDate" class="text-gray-700 mb-4"></p>
+  </div>
+
+  <!-- Charts -->
+  <div class="mb-6">
+    <canvas id="barChart"></canvas>
+  </div>
+  <div class="mb-6">
+    <canvas id="pieChart" style="max-height:400px;"></canvas>
+  </div>
+
+  <!-- Yearly Breakdown Table -->
+  <div class="overflow-x-auto">
+    <table class="min-w-full border border-gray-300" id="breakdownTable">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 border">Year</th>
+          <th class="px-4 py-2 border">Deposited</th>
+          <th class="px-4 py-2 border">Interest Earned</th>
+          <th class="px-4 py-2 border">Total Value</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const investmentType = document.getElementById('investmentType');
+  const investmentInput = document.getElementById('investment');
+  const amountLabel = document.getElementById('amountLabel');
+  const yearsInput = document.getElementById('years');
+  const rateInput = document.getElementById('rate');
+  const currencyInput = document.getElementById('currency');
+  const inflationCheckbox = document.getElementById('inflationCheckbox');
+  const inflationContainer = document.getElementById('inflationInputContainer');
+  const inflationRateInput = document.getElementById('inflationRate');
+  const calculateBtn = document.getElementById('calculateBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const resultsDiv = document.getElementById('results');
+  const totalInvestedP = document.getElementById('totalInvested');
+  const interestEarnedP = document.getElementById('interestEarned');
+  const maturityValueP = document.getElementById('maturityValue');
+  const maturityDateP = document.getElementById('maturityDate');
+  const breakdownTableBody = document.querySelector('#breakdownTable tbody');
+
+  let barChart, pieChart;
+
+  investmentType.addEventListener('change', () => {
+    amountLabel.textContent = investmentType.value === 'lumpsum' ? 'Investment Amount' : 'Monthly Contribution';
+  });
+
+  inflationCheckbox.addEventListener('change', () => {
+    inflationContainer.classList.toggle('hidden', !inflationCheckbox.checked);
+  });
+
+  calculateBtn.addEventListener('click', () => {
+    const P = parseFloat(investmentInput.value);
+    const t = parseInt(yearsInput.value);
+    const r = parseFloat(rateInput.value)/100;
+    const currency = currencyInput.value;
+    const isMonthly = investmentType.value==='monthly';
+    const inflationRate = inflationCheckbox.checked ? parseFloat(inflationRateInput.value)/100 : 0;
+
+    let yearlyData = [];
+    let totalInvested = 0;
+    let totalValue = 0;
+
+    if(isMonthly){
+      const monthlyRate = r/12;
+      totalInvested = P*12*t;
+      totalValue = P*((Math.pow(1+monthlyRate,12*t)-1)/monthlyRate)*(1+monthlyRate);
+
+      for(let year=1; year<=t; year++){
+        const yearValue = P*((Math.pow(1+monthlyRate,12*year)-1)/monthlyRate)*(1+monthlyRate);
+        yearlyData.push({year, invested: P*12*year, interest: yearValue - P*12*year, value: yearValue});
+      }
+    } else {
+      totalInvested = P;
+      totalValue = P*Math.pow(1+r, t);
+      for(let year=1; year<=t; year++){
+        const yearValue = P*Math.pow(1+r, year);
+        yearlyData.push({year, invested: P, interest: yearValue - P, value: yearValue});
+      }
+    }
+
+    if(inflationRate>0){
+      totalValue /= Math.pow(1+inflationRate,t);
+      yearlyData = yearlyData.map(d=>({year:d.year, invested:d.invested, interest:d.interest/Math.pow(1+inflationRate,d.year), value:d.value/Math.pow(1+inflationRate,d.year)}));
+    }
+
+    const interestEarned = totalValue - totalInvested;
+
+    totalInvestedP.textContent = `Total Deposited: ${currency}${totalInvested.toLocaleString()}`;
+    interestEarnedP.textContent = `Interest Earned: ${currency}${interestEarned.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    maturityValueP.textContent = `Maturity Value: ${currency}${totalValue.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    const maturityYear = new Date().getFullYear() + t;
+    maturityDateP.textContent = `Maturity Year: ${maturityYear}`;
+    resultsDiv.classList.remove('hidden');
+
+    // Yearly Breakdown Table
+    breakdownTableBody.innerHTML='';
+    yearlyData.forEach(d=>{
+      const row=`<tr>
+        <td class="px-4 py-2 border">${d.year}</td>
+        <td class="px-4 py-2 border">${currency}${d.invested.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${d.interest.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${d.value.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+      </tr>`;
+      breakdownTableBody.innerHTML+=row;
+    });
+
+    // Charts
+    const barData = {
+      labels: yearlyData.map(d=>`Year ${d.year}`),
+      datasets:[{label:'Total Value', data:yearlyData.map(d=>d.value), backgroundColor:'rgba(34,197,94,0.7)', borderColor:'rgba(34,197,94,1)', borderWidth:1}]
+    };
+    const pieData = {
+      labels:['Deposited','Interest'],
+      datasets:[{data:[totalInvested, interestEarned], backgroundColor:['#10B981','#6366F1']}]
+    };
+
+    if(barChart) barChart.destroy();
+    if(pieChart) pieChart.destroy();
+
+    const ctxBar = document.getElementById('barChart').getContext('2d');
+    barChart = new Chart(ctxBar,{type:'bar', data:barData, options:{responsive:true, plugins:{legend:{display:false}}}});
+    const ctxPie = document.getElementById('pieChart').getContext('2d');
+    pieChart = new Chart(ctxPie,{type:'pie', data:pieData, options:{responsive:true}});
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    investmentInput.value=100000;
+    yearsInput.value=15;
+    rateInput.value=7.1;
+    currencyInput.value='₹';
+    investmentType.value='lumpsum';
+    amountLabel.textContent='Investment Amount';
+    inflationCheckbox.checked=false;
+    inflationContainer.classList.add('hidden');
+    inflationRateInput.value=5;
+    resultsDiv.classList.add('hidden');
+    breakdownTableBody.innerHTML='';
+    if(barChart) barChart.destroy();
+    if(pieChart) pieChart.destroy();
+  });
+});
+</script>

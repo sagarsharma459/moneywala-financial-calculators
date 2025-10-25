@@ -1,0 +1,385 @@
+<!-- ✅ Moneywala FD (Fixed Deposit) Calculator -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div id="fd-calculator" class="max-w-4xl mx-auto my-10 bg-white shadow-2xl rounded-2xl p-6 font-sans">
+  <!-- Heading -->
+  <div class="bg-green-600 rounded-2xl p-4 text-center">
+    <h1 class="text-white text-2xl font-bold">🏦 Moneywala FD Calculator</h1>
+  </div>
+  <p class="text-gray-700 text-center mt-2 mb-6">
+    Calculate returns for a Fixed Deposit (Lumpsum) or Recurring Deposit (Monthly). Supports years+months tenure, various compounding frequencies, and optional inflation adjustment.
+  </p>
+
+  <!-- Inputs -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div>
+      <label class="block text-gray-700 font-medium">Investment Type</label>
+      <select id="fd-type" class="w-full p-2 border rounded">
+        <option value="lumpsum">Lumpsum Deposit</option>
+        <option value="monthly">Recurring (Monthly)</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium" id="fd-amount-label">Deposit Amount</label>
+      <input type="number" id="fd-amount" class="w-full p-2 border rounded" value="100000" min="0" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium">Tenure - Years</label>
+      <input type="number" id="fd-years" class="w-full p-2 border rounded" value="2" min="0" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium">Tenure - Months</label>
+      <input type="number" id="fd-months" class="w-full p-2 border rounded" value="6" min="0" max="11" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium">Annual Interest Rate (%)</label>
+      <input type="number" id="fd-rate" class="w-full p-2 border rounded" value="7" step="0.01" min="0" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium">Compounding Frequency</label>
+      <select id="fd-frequency" class="w-full p-2 border rounded">
+        <option value="12">Monthly</option>
+        <option value="4">Quarterly</option>
+        <option value="2">Half-Yearly</option>
+        <option value="1">Yearly</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium">Currency</label>
+      <select id="fd-currency" class="w-full p-2 border rounded">
+        <option value="₹">₹</option>
+        <option value="$">$</option>
+        <option value="€">€</option>
+        <option value="£">£</option>
+      </select>
+    </div>
+
+    <div class="flex items-center mt-6">
+      <input type="checkbox" id="fd-inflation-check" class="mr-2" />
+      <label class="text-gray-700 font-medium">Adjust for Inflation</label>
+    </div>
+
+    <div id="fd-inflation-container" class="hidden">
+      <label class="block text-gray-700 font-medium">Inflation Rate (%)</label>
+      <input type="number" id="fd-inflation-rate" class="w-full p-2 border rounded" value="5" step="0.01" min="0" />
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="flex justify-center gap-4 mb-6">
+    <button id="fd-calc" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700">Calculate</button>
+    <button id="fd-reset" class="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500">Reset</button>
+  </div>
+
+  <!-- Results -->
+  <div id="fd-results" class="text-center mb-6 hidden">
+    <h2 class="text-xl font-bold mb-2">Results</h2>
+    <p id="fd-total-invested" class="text-gray-700 mb-1"></p>
+    <p id="fd-interest-earned" class="text-gray-700 mb-1"></p>
+    <p id="fd-maturity-value" class="text-gray-700 mb-1"></p>
+    <p id="fd-real-value" class="text-gray-700 mb-1"></p>
+  </div>
+
+  <!-- Charts -->
+  <div class="mb-6">
+    <canvas id="fd-barChart"></canvas>
+  </div>
+  <div class="mb-6">
+    <canvas id="fd-pieChart" style="max-height:400px;"></canvas>
+  </div>
+
+  <!-- Yearly Breakdown Table -->
+  <div class="overflow-x-auto">
+    <table class="min-w-full border border-gray-300" id="fd-breakdown">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 border">Period</th>
+          <th class="px-4 py-2 border">Total Deposited</th>
+          <th class="px-4 py-2 border">Interest Earned</th>
+          <th class="px-4 py-2 border">Total Value</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Elements
+  const typeEl = document.getElementById('fd-type');
+  const amountEl = document.getElementById('fd-amount');
+  const amountLabelEl = document.getElementById('fd-amount-label');
+  const yearsEl = document.getElementById('fd-years');
+  const monthsEl = document.getElementById('fd-months');
+  const rateEl = document.getElementById('fd-rate');
+  const freqEl = document.getElementById('fd-frequency');
+  const currencyEl = document.getElementById('fd-currency');
+  const inflationCheck = document.getElementById('fd-inflation-check');
+  const inflationContainer = document.getElementById('fd-inflation-container');
+  const inflationRateEl = document.getElementById('fd-inflation-rate');
+
+  const calcBtn = document.getElementById('fd-calc');
+  const resetBtn = document.getElementById('fd-reset');
+
+  const resultsBlock = document.getElementById('fd-results');
+  const investedEl = document.getElementById('fd-total-invested');
+  const interestEl = document.getElementById('fd-interest-earned');
+  const maturityEl = document.getElementById('fd-maturity-value');
+  const realEl = document.getElementById('fd-real-value');
+
+  const breakdownBody = document.querySelector('#fd-breakdown tbody');
+
+  let barChart = null;
+  let pieChart = null;
+
+  // Toggle amount label for type
+  typeEl.addEventListener('change', () => {
+    amountLabelEl.textContent = typeEl.value === 'lumpsum' ? 'Deposit Amount' : 'Monthly Deposit';
+  });
+
+  inflationCheck.addEventListener('change', () => {
+    inflationContainer.classList.toggle('hidden', !inflationCheck.checked);
+  });
+
+  // Utility: clamp non-negative where appropriate
+  function toNumber(v) {
+    const n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
+  }
+
+  // Main calculation
+  calcBtn.addEventListener('click', () => {
+    // Read inputs
+    const mode = typeEl.value; // lumpsum or monthly
+    const principal = toNumber(amountEl.value); // deposit amount or monthly
+    const years = Math.max(0, Math.floor(toNumber(yearsEl.value)));
+    const months = Math.min(11, Math.max(0, Math.floor(toNumber(monthsEl.value))));
+    const totalMonths = years * 12 + months;
+    const tYears = totalMonths / 12; // fractional years
+    const annualRate = Math.max(0, toNumber(rateEl.value)) / 100; // decimal
+    const n = parseInt(freqEl.value, 10); // compounding freq per year
+    const currency = currencyEl.value;
+    const inflation = inflationCheck.checked ? Math.max(0, toNumber(inflationRateEl.value) / 100) : 0;
+
+    // Basic validation
+    if (principal <= 0 || tYears <= 0) {
+      alert('Please enter positive deposit amount and tenure.');
+      return;
+    }
+
+    // Clear previous
+    breakdownBody.innerHTML = '';
+
+    // Helper: monthly effective growth factor given compounding n/year
+    // monthlyFactor i such that (1+i)^12 = (1 + r/n)^(n)
+    const monthlyFactor = (annualRate === 0) ? 0 : Math.pow(Math.pow(1 + annualRate / n, n), 1 / 12) - 1;
+
+    // Lumpsum calculation (supports fractional years)
+    function calcLumpsum() {
+      // FV = P * (1 + r/n)^(n * t)
+      const fv = (annualRate === 0) ? principal : principal * Math.pow(1 + annualRate / n, n * tYears);
+
+      // Yearly breakdown including partial final year
+      const rows = [];
+      let cumulativeInvested = principal; // for lumpsum invested once
+      // For each full year
+      const fullYears = Math.floor(tYears);
+      for (let y = 1; y <= fullYears; y++) {
+        const yearT = y; // years elapsed
+        const val = (annualRate === 0) ? principal : principal * Math.pow(1 + annualRate / n, n * yearT);
+        rows.push({ label: `Year ${y}`, deposited: principal, interest: val - principal, value: val });
+      }
+      // Partial final year
+      const fractional = tYears - fullYears;
+      if (fractional > 1e-12) {
+        const monthsFraction = Math.round(fractional * 12);
+        const val = (annualRate === 0) ? principal : principal * Math.pow(1 + monthlyFactor, monthsFraction);
+        rows.push({ label: `${fullYears}yr + ${monthsFraction}mo`, deposited: principal, interest: val - principal, value: val });
+      }
+      return { fv, rows };
+    }
+
+    // Recurring monthly deposits calculation
+    function calcMonthly() {
+      // Use monthlyFactor as monthly rate corresponding to chosen compounding frequency.
+      // Deposit at month-end formula (common RD): FV = P * ( (1+i)^N - 1 ) / i
+      const i = monthlyFactor;
+      const N = totalMonths;
+
+      let fv;
+      if (annualRate === 0 || i === 0) {
+        // No interest
+        fv = principal * N;
+      } else {
+        fv = principal * (Math.pow(1 + i, N) - 1) / i;
+      }
+
+      // Yearly breakdown by simulating month-by-month accumulation (accurate and handles partial final year)
+      const rows = [];
+      let balance = 0;
+      let depositedCumulative = 0;
+      for (let m = 1; m <= N; m++) {
+        // deposit at month-end
+        depositedCumulative += principal;
+        // apply monthly growth to existing balance then add deposit (assuming interest applied before deposit at period end)
+        balance = balance * (1 + i) + principal;
+        if (m % 12 === 0) {
+          const yearIndex = m / 12;
+          rows.push({
+            label: `Year ${yearIndex}`,
+            deposited: depositedCumulative,
+            interest: balance - depositedCumulative,
+            value: balance
+          });
+        }
+      }
+      // Final partial year if any months leftover (if totalMonths not divisible by 12)
+      const leftoverMonths = N % 12;
+      if (leftoverMonths !== 0) {
+        // simulate final partial-year rows already handled above; but if totalMonths < 12 we won't have pushed any year: handle that
+        if (N < 12) {
+          rows.push({ label: `${Math.floor(N/12)}yr + ${leftoverMonths}mo`, deposited: depositedCumulative, interest: balance - depositedCumulative, value: balance });
+        } else {
+          // if there are months beyond last full year already included, add final partial row
+          rows.push({ label: `${Math.floor(N/12)}yr + ${leftoverMonths}mo`, deposited: depositedCumulative, interest: balance - depositedCumulative, value: balance });
+        }
+      }
+
+      return { fv, rows };
+    }
+
+    // Choose calculation path
+    let fvResult, breakdownRows;
+    if (mode === 'lumpsum') {
+      const res = calcLumpsum();
+      fvResult = res.fv;
+      breakdownRows = res.rows;
+    } else {
+      const res = calcMonthly();
+      fvResult = res.fv;
+      breakdownRows = res.rows;
+    }
+
+    // Total invested amount
+    const invested = (mode === 'lumpsum') ? principal : principal * totalMonths;
+
+    // Nominal interest and maturity
+    let nominalFV = fvResult;
+    let nominalInterest = nominalFV - invested;
+
+    // Clamp nominalInterest to >= 0 when inflation NOT applied (to avoid showing negative interest in normal cases)
+    if (!inflation && nominalInterest < 0) nominalInterest = 0;
+
+    // Real (inflation-adjusted) value and interest if inflation chosen
+    let realFV = null, realInterest = null;
+    if (inflation) {
+      realFV = nominalFV / Math.pow(1 + inflation, tYears);
+      realInterest = realFV - invested;
+    }
+
+    // Populate results
+    investedEl.textContent = `Total Invested: ${currency}${invested.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    interestEl.textContent = `Estimated Interest (Nominal): ${currency}${nominalInterest.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    maturityEl.textContent = `Maturity Value (Nominal): ${currency}${nominalFV.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    if (inflation) {
+      realEl.textContent = `Real Value after inflation (${(inflation*100).toFixed(2)}%): ${currency}${realFV.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+      realEl.classList.remove('hidden');
+    } else {
+      realEl.textContent = '';
+      realEl.classList.add('hidden');
+    }
+    resultsBlock.classList.remove('hidden');
+
+    // Populate table
+    breakdownBody.innerHTML = '';
+    breakdownRows.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="px-4 py-2 border">${row.label}</td>
+        <td class="px-4 py-2 border">${currency}${row.deposited.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${(row.interest >= 0 ? row.interest : 0).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${row.value.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+      `;
+      breakdownBody.appendChild(tr);
+    });
+
+    // Charts data
+    const labels = breakdownRows.map(r => r.label);
+    const values = breakdownRows.map(r => r.value);
+    const principalForPie = invested;
+    const returnsForPie = Math.max(0, nominalFV - invested);
+
+    // Destroy previous charts
+    if (barChart) barChart.destroy();
+    if (pieChart) pieChart.destroy();
+
+    // Bar chart
+    const ctxBar = document.getElementById('fd-barChart').getContext('2d');
+    barChart = new Chart(ctxBar, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Total Value',
+          data: values,
+          backgroundColor: 'rgba(34,197,94,0.7)',
+          borderColor: 'rgba(34,197,94,1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    // Pie chart
+    const ctxPie = document.getElementById('fd-pieChart').getContext('2d');
+    pieChart = new Chart(ctxPie, {
+      type: 'pie',
+      data: {
+        labels: ['Principal', 'Interest'],
+        datasets: [{
+          data: [principalForPie, returnsForPie],
+          backgroundColor: ['#10B981', '#6366F1']
+        }]
+      },
+      options: { responsive: true }
+    });
+  });
+
+  // Reset behavior
+  resetBtn.addEventListener('click', () => {
+    typeEl.value = 'lumpsum';
+    amountEl.value = 100000;
+    amountLabelEl.textContent = 'Deposit Amount';
+    yearsEl.value = 2;
+    monthsEl.value = 6;
+    rateEl.value = 7;
+    freqEl.value = 12;
+    currencyEl.value = '₹';
+    inflationCheck.checked = false;
+    inflationContainer.classList.add('hidden');
+    inflationRateEl.value = 5;
+    resultsBlock.classList.add('hidden');
+    breakdownBody.innerHTML = '';
+    investedEl.textContent = '';
+    interestEl.textContent = '';
+    maturityEl.textContent = '';
+    realEl.textContent = '';
+    if (barChart) { barChart.destroy(); barChart = null; }
+    if (pieChart) { pieChart.destroy(); pieChart = null; }
+  });
+});
+</script>

@@ -1,0 +1,213 @@
+<!-- ✅ Enhanced SIP Calculator Tool (MoneyWala.Space Style) -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div id="sip-calculator" class="max-w-4xl mx-auto my-10 bg-white shadow-2xl rounded-2xl p-6 font-sans border border-gray-100">
+ <div class="bg-green-600 rounded-2xl p-4 text-center">
+    <h1 class="text-white text-2xl font-bold">💰 Moneywala SIP Calculator</h1>
+  </div>
+  <p class="text-black text-sm md:text-base max-w-2xl mx-auto text-center mb-4">
+    Calculate your wealth growth with our SIP Calculator. Adjust your monthly investment, return rate, and period to see how your money grows over time.
+  </p>
+
+  <!-- Input Fields -->
+  <div class="grid md:grid-cols-2 gap-6">
+    <div>
+      <label class="block font-semibold text-gray-700 mb-1">Monthly Investment</label>
+      <input id="monthlyInvestment" type="number" value="5000" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400">
+    </div>
+
+    <div>
+      <label class="block font-semibold text-gray-700 mb-1">Investment Period (Years)</label>
+      <input id="investmentPeriod" type="number" value="10" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400">
+    </div>
+
+    <div>
+      <label class="block font-semibold text-gray-700 mb-1">Expected Annual Return (%)</label>
+      <input id="annualReturn" type="number" value="12" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400">
+    </div>
+
+    <div>
+      <label class="block font-semibold text-gray-700 mb-1">Currency</label>
+      <select id="currency" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400">
+        <option value="₹">₹ (INR)</option>
+        <option value="$">$ (USD)</option>
+        <option value="€">€ (EUR)</option>
+        <option value="£">£ (GBP)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Inflation Toggle -->
+  <div class="flex items-center mt-4">
+    <input id="adjustInflation" type="checkbox" class="h-5 w-5 text-indigo-600">
+    <label for="adjustInflation" class="ml-2 text-gray-700 font-medium">Adjust for Inflation</label>
+  </div>
+
+  <!-- Inflation Input (Hidden until checked) -->
+  <div id="inflationInputDiv" class="hidden mt-2">
+    <label class="block font-semibold text-gray-700 mb-1">Inflation Rate (%)</label>
+    <input id="inflationRate" type="number" value="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400">
+  </div>
+
+  <!-- Buttons -->
+  <div class="flex flex-wrap justify-center gap-4 mt-6">
+    <button id="calculateBtn" class="bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition">Calculate</button>
+    <button id="resetBtn" class="bg-gray-300 text-gray-800 px-6 py-2 rounded-xl hover:bg-gray-400 transition">Reset</button>
+  </div>
+
+  <!-- Results Section -->
+  <div id="resultSection" class="hidden mt-10">
+    <h3 class="text-2xl font-semibold text-center text-green-600 mb-4">📊 Investment Summary</h3>
+
+    <div class="grid md:grid-cols-3 gap-4 text-center">
+      <div class="bg-indigo-50 p-4 rounded-lg shadow">
+        <p class="font-medium text-gray-500">Total Invested</p>
+        <p id="investedAmount" class="text-xl font-bold text-indigo-700">-</p>
+      </div>
+      <div class="bg-green-50 p-4 rounded-lg shadow">
+        <p class="font-medium text-gray-500">Estimated Returns</p>
+        <p id="estimatedReturns" class="text-xl font-bold text-green-700">-</p>
+      </div>
+      <div class="bg-yellow-50 p-4 rounded-lg shadow">
+        <p class="font-medium text-gray-500">Total Value</p>
+        <p id="totalValue" class="text-xl font-bold text-yellow-700">-</p>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid md:grid-cols-2 gap-8 mt-8">
+      <div>
+        <canvas id="sipChart" height="120"></canvas>
+      </div>
+      <div>
+        <canvas id="sipPieChart" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- Yearly Breakdown -->
+    <div class="mt-10 overflow-x-auto">
+      <h4 class="text-lg font-semibold text-gray-700 mb-2">📅 Yearly Breakdown</h4>
+      <table class="w-full border-collapse border border-gray-200 text-center text-sm">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="border border-gray-200 px-3 py-2">Year</th>
+            <th class="border border-gray-200 px-3 py-2">Invested</th>
+            <th class="border border-gray-200 px-3 py-2">Value</th>
+          </tr>
+        </thead>
+        <tbody id="breakdownTable"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ WordPress Safe JS -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const calcBtn = document.getElementById('calculateBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const inflationToggle = document.getElementById('adjustInflation');
+  const inflationDiv = document.getElementById('inflationInputDiv');
+  let sipChart, sipPieChart;
+
+  inflationToggle.addEventListener('change', function() {
+    inflationDiv.classList.toggle('hidden', !inflationToggle.checked);
+  });
+
+  calcBtn.addEventListener('click', function() {
+    const monthly = parseFloat(document.getElementById('monthlyInvestment').value);
+    const years = parseInt(document.getElementById('investmentPeriod').value);
+    const rate = parseFloat(document.getElementById('annualReturn').value) / 100 / 12;
+    const currency = document.getElementById('currency').value;
+    const adjustInflation = inflationToggle.checked;
+    const inflationPercent = parseFloat(document.getElementById('inflationRate').value) || 6;
+    const inflationRate = inflationPercent / 100 / 12;
+
+    if (!monthly || !years || !rate) {
+      alert('Please fill all fields!');
+      return;
+    }
+
+    const months = years * 12;
+    let totalInvested = monthly * months;
+    let totalValue = monthly * ((Math.pow(1 + rate, months) - 1) / rate) * (1 + rate);
+    let estimatedReturns = totalValue - totalInvested;
+
+    if (adjustInflation) {
+      totalValue /= Math.pow(1 + inflationRate, months);
+      estimatedReturns = totalValue - totalInvested;
+    }
+
+    // Show results
+    document.getElementById('resultSection').classList.remove('hidden');
+    document.getElementById('investedAmount').textContent = currency + totalInvested.toLocaleString();
+    document.getElementById('estimatedReturns').textContent = currency + estimatedReturns.toLocaleString();
+    document.getElementById('totalValue').textContent = currency + totalValue.toLocaleString();
+
+    // Yearly table
+    const breakdownTable = document.getElementById('breakdownTable');
+    breakdownTable.innerHTML = '';
+    for (let y = 1; y <= years; y++) {
+      let monthsUpToYear = y * 12;
+      let currentValue = monthly * ((Math.pow(1 + rate, monthsUpToYear) - 1) / rate) * (1 + rate);
+      let adjustedValue = adjustInflation ? currentValue / Math.pow(1 + inflationRate, monthsUpToYear) : currentValue;
+      breakdownTable.innerHTML += `
+        <tr class="hover:bg-gray-50">
+          <td class="border border-gray-200 px-3 py-2">${y}</td>
+          <td class="border border-gray-200 px-3 py-2">${currency}${(monthly * monthsUpToYear).toLocaleString()}</td>
+          <td class="border border-gray-200 px-3 py-2">${currency}${adjustedValue.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+        </tr>`;
+    }
+
+    // Bar Chart
+    const ctx1 = document.getElementById('sipChart').getContext('2d');
+    if (sipChart) sipChart.destroy();
+    sipChart = new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels: ['Total Invested', 'Total Value'],
+        datasets: [{
+          label: 'Investment Comparison',
+          data: [totalInvested, totalValue],
+          backgroundColor: ['#6366F1', '#22C55E']
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+
+    // Pie Chart
+    const ctx2 = document.getElementById('sipPieChart').getContext('2d');
+    if (sipPieChart) sipPieChart.destroy();
+    sipPieChart = new Chart(ctx2, {
+      type: 'pie',
+      data: {
+        labels: ['Invested Amount', 'Estimated Returns'],
+        datasets: [{
+          data: [totalInvested, estimatedReturns],
+          backgroundColor: ['#6366F1', '#22C55E'],
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' },
+          title: { display: true, text: 'Investment Distribution' }
+        }
+      }
+    });
+  });
+
+  resetBtn.addEventListener('click', function() {
+    document.getElementById('monthlyInvestment').value = 5000;
+    document.getElementById('investmentPeriod').value = 10;
+    document.getElementById('annualReturn').value = 12;
+    document.getElementById('inflationRate').value = 6;
+    inflationToggle.checked = false;
+    inflationDiv.classList.add('hidden');
+    document.getElementById('resultSection').classList.add('hidden');
+    if (sipChart) sipChart.destroy();
+    if (sipPieChart) sipPieChart.destroy();
+  });
+});
+</script>

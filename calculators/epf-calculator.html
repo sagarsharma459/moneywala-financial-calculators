@@ -1,0 +1,210 @@
+<!-- ✅ Moneywala EPF Calculator -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div id="epf-calculator" class="max-w-4xl mx-auto my-10 bg-white shadow-2xl rounded-2xl p-6 font-sans">
+  <!-- Heading -->
+  <div class="bg-green-600 rounded-2xl p-4 text-center">
+    <h1 class="text-white text-2xl font-bold">💰 EPF Calculator</h1>
+  </div>
+  <p class="text-gray-700 text-center mt-2 mb-6">Estimate your EPF maturity value including employee and employer contributions, with interest and optional inflation adjustment.</p>
+
+  <!-- Input Fields -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div>
+      <label class="block text-gray-700 font-medium">Monthly Salary / PF Salary</label>
+      <input type="number" id="salary" value="50000" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Employee Contribution (%)</label>
+      <input type="number" id="empContribution" value="12" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Employer Contribution (%)</label>
+      <input type="number" id="employerContribution" value="12" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Interest Rate (%)</label>
+      <input type="number" id="rate" value="8.1" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Investment Period (Years)</label>
+      <input type="number" id="years" value="30" class="w-full p-2 border rounded" />
+    </div>
+    <div>
+      <label class="block text-gray-700 font-medium">Currency</label>
+      <select id="currency" class="w-full p-2 border rounded">
+        <option value="₹">₹</option>
+        <option value="$">$</option>
+        <option value="€">€</option>
+        <option value="£">£</option>
+      </select>
+    </div>
+    <div class="flex items-center mt-6">
+      <input type="checkbox" id="inflationCheckbox" class="mr-2" />
+      <label class="text-gray-700 font-medium">Adjust for Inflation</label>
+    </div>
+    <div id="inflationInputContainer" class="hidden">
+      <label class="block text-gray-700 font-medium">Inflation Rate (%)</label>
+      <input type="number" id="inflationRate" value="5" class="w-full p-2 border rounded" />
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="flex justify-center gap-4 mb-6">
+    <button id="calculateBtn" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700">Calculate</button>
+    <button id="resetBtn" class="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500">Reset</button>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="text-center mb-6 hidden">
+    <h2 class="text-xl font-bold mb-2">Results</h2>
+    <p id="totalEmployee" class="text-gray-700 mb-1"></p>
+    <p id="totalEmployer" class="text-gray-700 mb-1"></p>
+    <p id="interestEarned" class="text-gray-700 mb-1"></p>
+    <p id="maturityValue" class="text-gray-700 mb-4"></p>
+  </div>
+
+  <!-- Charts -->
+  <div class="mb-6">
+    <canvas id="barChart"></canvas>
+  </div>
+  <div class="mb-6">
+    <canvas id="pieChart" style="max-height:400px;"></canvas>
+  </div>
+
+  <!-- Yearly Breakdown Table -->
+  <div class="overflow-x-auto">
+    <table class="min-w-full border border-gray-300" id="breakdownTable">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 border">Year</th>
+          <th class="px-4 py-2 border">Employee Contribution</th>
+          <th class="px-4 py-2 border">Employer Contribution</th>
+          <th class="px-4 py-2 border">Interest</th>
+          <th class="px-4 py-2 border">Total Value</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const salaryInput = document.getElementById('salary');
+  const empInput = document.getElementById('empContribution');
+  const employerInput = document.getElementById('employerContribution');
+  const rateInput = document.getElementById('rate');
+  const yearsInput = document.getElementById('years');
+  const currencyInput = document.getElementById('currency');
+  const inflationCheckbox = document.getElementById('inflationCheckbox');
+  const inflationContainer = document.getElementById('inflationInputContainer');
+  const inflationRateInput = document.getElementById('inflationRate');
+  const calculateBtn = document.getElementById('calculateBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const resultsDiv = document.getElementById('results');
+  const totalEmployeeP = document.getElementById('totalEmployee');
+  const totalEmployerP = document.getElementById('totalEmployer');
+  const interestEarnedP = document.getElementById('interestEarned');
+  const maturityValueP = document.getElementById('maturityValue');
+  const breakdownTableBody = document.querySelector('#breakdownTable tbody');
+
+  let barChart, pieChart;
+
+  inflationCheckbox.addEventListener('change', ()=>{
+    inflationContainer.classList.toggle('hidden', !inflationCheckbox.checked);
+  });
+
+  calculateBtn.addEventListener('click', ()=>{
+    const salary = parseFloat(salaryInput.value);
+    const empPerc = parseFloat(empInput.value)/100;
+    const employerPerc = parseFloat(employerInput.value)/100;
+    const r = parseFloat(rateInput.value)/100;
+    const t = parseInt(yearsInput.value);
+    const currency = currencyInput.value;
+    const inflationRate = inflationCheckbox.checked ? parseFloat(inflationRateInput.value)/100 : 0;
+
+    let totalEmp=0, totalEmployer=0, totalValue=0;
+    let yearlyData=[];
+
+    for(let year=1; year<=t; year++){
+      totalEmp += salary*12*empPerc;
+      totalEmployer += salary*12*employerPerc;
+      let yearValue = (totalEmp + totalEmployer) * Math.pow(1+r,year);
+      yearlyData.push({
+        year,
+        emp: totalEmp,
+        employer: totalEmployer,
+        interest: yearValue - (totalEmp + totalEmployer),
+        value: yearValue
+      });
+    }
+
+    if(inflationRate>0){
+      yearlyData = yearlyData.map(d=>({
+        year:d.year,
+        emp:d.emp,
+        employer:d.employer,
+        interest:d.interest/Math.pow(1+inflationRate,d.year),
+        value:d.value/Math.pow(1+inflationRate,d.year)
+      }));
+    }
+
+    totalValue = yearlyData[yearlyData.length-1].value;
+    const totalInterest = totalValue - totalEmp - totalEmployer;
+
+    totalEmployeeP.textContent = `Total Employee Contribution: ${currency}${totalEmp.toLocaleString()}`;
+    totalEmployerP.textContent = `Total Employer Contribution: ${currency}${totalEmployer.toLocaleString()}`;
+    interestEarnedP.textContent = `Interest Earned: ${currency}${totalInterest.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    maturityValueP.textContent = `Maturity Value: ${currency}${totalValue.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+    resultsDiv.classList.remove('hidden');
+
+    // Table
+    breakdownTableBody.innerHTML='';
+    yearlyData.forEach(d=>{
+      breakdownTableBody.innerHTML+=`<tr>
+        <td class="px-4 py-2 border">${d.year}</td>
+        <td class="px-4 py-2 border">${currency}${d.emp.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${d.employer.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${d.interest.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+        <td class="px-4 py-2 border">${currency}${d.value.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+      </tr>`;
+    });
+
+    // Charts
+    const barData = {
+      labels: yearlyData.map(d=>`Year ${d.year}`),
+      datasets:[{label:'Total Value', data:yearlyData.map(d=>d.value), backgroundColor:'rgba(34,197,94,0.7)', borderColor:'rgba(34,197,94,1)', borderWidth:1}]
+    };
+    const pieData = {
+      labels:['Employee + Employer','Interest'],
+      datasets:[{data:[totalEmp+totalEmployer,totalInterest], backgroundColor:['#10B981','#6366F1']}]
+    };
+
+    if(barChart) barChart.destroy();
+    if(pieChart) pieChart.destroy();
+
+    const ctxBar = document.getElementById('barChart').getContext('2d');
+    barChart = new Chart(ctxBar,{type:'bar', data:barData, options:{responsive:true, plugins:{legend:{display:false}}}});
+    const ctxPie = document.getElementById('pieChart').getContext('2d');
+    pieChart = new Chart(ctxPie,{type:'pie', data:pieData, options:{responsive:true}});
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    salaryInput.value=50000;
+    empInput.value=12;
+    employerInput.value=12;
+    rateInput.value=8.1;
+    yearsInput.value=30;
+    currencyInput.value='₹';
+    inflationCheckbox.checked=false;
+    inflationContainer.classList.add('hidden');
+    inflationRateInput.value=5;
+    resultsDiv.classList.add('hidden');
+    breakdownTableBody.innerHTML='';
+    if(barChart) barChart.destroy();
+    if(pieChart) pieChart.destroy();
+  });
+});
+</script>
