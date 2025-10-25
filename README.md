@@ -29,7 +29,7 @@ Each calculator includes:
 - **Compatibility:** Works in WordPress or standalone  
 
 ## 🌐 Live Demo
-Coming soon: [moneywala.space/tools](https://moneywala.space/tools)
+ [moneywala.space/tools](https://moneywala.space/tools)
 
 ## 📸 Screenshots
 See `/preview/screenshots` for visual previews of each calculator.
